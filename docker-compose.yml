@@ -1,0 +1,66 @@
+services:
+  db:
+    image: pgvector/pgvector:0.8.0-pg17
+    container_name: on-premise-rag-document-assistant-db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - pgdata:/var/lib/postgresql/data                             # users, documents, chunks and vectors
+      - ./sql/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro    # enables the pgvector extension
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  api:
+    build: .
+    image: on-premise-rag-document-assistant-system:latest
+    container_name: on-premise-rag-document-assistant-system
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    volumes:
+      - uploads:/data/uploads   # original PDFs, stored by SHA-256
+    # Lets the container reach an Ollama running natively on the host (Mac / Metal GPU)
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  # Linux server only: docker compose --profile ollama up -d
+  # Pin a specific tag in production instead of latest.
+  ollama:
+    image: ollama/ollama:latest
+    container_name: on-premise-rag-document-assistant-ollama
+    profiles: ["ollama"]
+    volumes:
+      - ollama:/root/.ollama    # downloaded model weights
+    ports:
+      - "127.0.0.1:11434:11434"
+    restart: unless-stopped
+
+  # Downloads the LLM and embedding models once, then exits
+  ollama-pull:
+    image: ollama/ollama:latest
+    profiles: ["ollama"]
+    depends_on:
+      - ollama
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    entrypoint: ["/bin/sh", "-c", "sleep 3 && ollama pull ${LLM_MODEL} && ollama pull ${EMBED_MODEL}"]
+    restart: "no"
+
+volumes:
+  pgdata:
+  uploads:
+  ollama:

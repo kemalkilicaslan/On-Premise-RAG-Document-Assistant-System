@@ -1,0 +1,28 @@
+# Version control
+.git
+.gitignore
+.github
+
+# Python cache and virtual environments
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+
+# Secrets (passed at runtime through env_file)
+.env
+
+# Datasets and generated results
+data/
+outputs/
+*.pdf
+*.zip
+*.png
+
+# Documentation and tests
+tests/
+LICENSE
